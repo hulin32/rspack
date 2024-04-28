@@ -1,5 +1,6 @@
 mod raw_banner;
 mod raw_bundle_info;
+mod raw_circular_dependency;
 mod raw_copy;
 mod raw_css_extract;
 mod raw_html;
@@ -155,6 +156,8 @@ pub enum BuiltinPluginName {
   // rspack js adapter plugins
   // naming format follow XxxRspackPlugin
   JsLoaderRspackPlugin,
+
+  CircularDependencyPlugin,
 }
 
 #[napi(object)]
@@ -439,6 +442,15 @@ impl BuiltinPlugin {
           JsLoaderResolverPlugin::new(downcast_into::<JsLoaderRunner>(self.options)?).boxed(),
         );
       }
+
+      BuiltinPluginName::CircularDependencyPlugin => {
+        plugins.push(
+          CircularDependencyPlugin::new(
+            downcast_into::<RawCircularDependencyPluginOptions>(self.options)?.into(),
+          )
+          .boxed(),
+        );
+      }
     }
     Ok(())
   }
@@ -450,3 +462,6 @@ fn downcast_into<T: FromNapiValue + 'static>(o: JsUnknown) -> Result<T> {
 
 // TO BE DEPRECATED
 pub use raw_to_be_deprecated::RawBuiltins;
+use rspack_plugin_circular_dependency::CircularDependencyPlugin;
+
+use crate::options::raw_builtins::raw_circular_dependency::RawCircularDependencyPluginOptions;

@@ -168,7 +168,8 @@ export enum BuiltinPluginName {
   SwcCssMinimizerRspackPlugin = 'SwcCssMinimizerRspackPlugin',
   BundlerInfoRspackPlugin = 'BundlerInfoRspackPlugin',
   CssExtractRspackPlugin = 'CssExtractRspackPlugin',
-  JsLoaderRspackPlugin = 'JsLoaderRspackPlugin'
+  JsLoaderRspackPlugin = 'JsLoaderRspackPlugin',
+  CircularDependencyPlugin = 'CircularDependencyPlugin'
 }
 
 export function cleanupGlobalTrace(): void
@@ -689,6 +690,15 @@ export interface RawCacheOptions {
 
 export interface RawChunkOptionNameCtx {
   module: JsModule
+}
+
+export interface RawCircularDependencyPluginOptions {
+  exclude?: JsRegExp
+  include?: JsRegExp
+  failOnError?: boolean
+  allowAsyncCycles?: boolean
+  cwd?: string
+  onDetected?: (paths: string[]) => void
 }
 
 export interface RawConsumeOptions {

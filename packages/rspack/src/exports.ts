@@ -105,6 +105,11 @@ export type { EntryOptions } from "./builtin-plugin";
 
 export { ExternalsPlugin } from "./builtin-plugin";
 
+export {
+	CircularDependencyPlugin,
+	type CircularDependencyPluginOptions
+} from "./builtin-plugin";
+
 export { HotModuleReplacementPlugin } from "./builtin-plugin";
 
 export { LoaderOptionsPlugin } from "./lib/LoaderOptionsPlugin";

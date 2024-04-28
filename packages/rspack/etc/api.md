@@ -46,6 +46,7 @@ import { PathWithInfo } from '@rspack/binding';
 import { RawBannerPluginOptions } from '@rspack/binding';
 import { RawBuiltins } from '@rspack/binding';
 import { RawBundlerInfoPluginOptions } from '@rspack/binding';
+import { RawCircularDependencyPluginOptions } from '@rspack/binding';
 import { RawCopyPattern } from '@rspack/binding';
 import { RawCopyRspackPluginOptions } from '@rspack/binding';
 import type { RawCssExtractPluginOption } from '@rspack/binding';
@@ -1091,6 +1092,20 @@ const ChunkPrefetchPreloadPlugin: {
         apply(compiler: Compiler_2): void;
     };
 };
+
+// @public (undocumented)
+export const CircularDependencyPlugin: {
+    new (options: RawCircularDependencyPluginOptions): {
+        name: BuiltinPluginName;
+        _options: RawCircularDependencyPluginOptions;
+        affectedHooks: "done" | "compilation" | "make" | "compile" | "emit" | "afterEmit" | "invalid" | "thisCompilation" | "afterDone" | "normalModuleFactory" | "contextModuleFactory" | "initialize" | "shouldEmit" | "infrastructureLog" | "beforeRun" | "run" | "assetEmitted" | "failed" | "shutdown" | "watchRun" | "watchClose" | "environment" | "afterEnvironment" | "afterPlugins" | "afterResolvers" | "beforeCompile" | "afterCompile" | "finishMake" | "entryOption" | undefined;
+        raw(): BuiltinPlugin;
+        apply(compiler: Compiler_2): void;
+    };
+};
+
+// @public (undocumented)
+export type CircularDependencyPluginOptions = RawCircularDependencyPluginOptions;
 
 // @public (undocumented)
 export type Clean = z.infer<typeof clean>;
@@ -5991,6 +6006,8 @@ declare namespace oldBuiltins {
         ModuleConcatenationPlugin,
         CssModulesPlugin,
         APIPlugin,
+        CircularDependencyPlugin,
+        CircularDependencyPluginOptions,
         HtmlRspackPluginOptions,
         HtmlRspackPlugin,
         CopyRspackPluginOptions,
@@ -7852,6 +7869,8 @@ declare namespace rspackExports {
         EntryPlugin,
         EntryOptions,
         ExternalsPlugin,
+        CircularDependencyPlugin,
+        CircularDependencyPluginOptions,
         HotModuleReplacementPlugin,
         LoaderOptionsPlugin,
         LoaderTargetPlugin,
