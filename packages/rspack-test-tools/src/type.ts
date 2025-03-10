@@ -207,7 +207,8 @@ export type TTestConfig<T extends ECompilerType> = {
 	) => IBasicModuleScope;
 	checkStats?: (
 		stepName: string,
-		stats: TCompilerStatsCompilation<T>
+		jsonStats: TCompilerStatsCompilation<T> | undefined,
+		stringStats: String
 	) => boolean;
 	findBundle?: (
 		index: number,
@@ -218,6 +219,7 @@ export type TTestConfig<T extends ECompilerType> = {
 	nonEsmThis?: (p: string | string[]) => Object;
 	modules?: Record<string, Object>;
 	timeout?: number;
+	concurrent?: boolean;
 };
 
 export type TTestFilter<T extends ECompilerType> = (

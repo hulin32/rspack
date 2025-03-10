@@ -8,16 +8,26 @@ class Plugin {
 	 * @param {import("@rspack/core").Compiler} compiler
 	 */
 	apply(compiler) {
-		const { EntryPlugin } = compiler.webpack;
+		const { EntryPlugin, EntryDependency } = compiler.webpack;
 
 		const modules = {};
+
+		const fooDependency = EntryPlugin.createDependency(
+			path.resolve(__dirname, "foo.js")
+		);
+		const barDependency = EntryPlugin.createDependency(
+			path.resolve(__dirname, "bar.js")
+		);
+
+		expect(fooDependency instanceof EntryDependency).toBeTruthy();
+
 		compiler.hooks.finishMake.tapPromise(PLUGIN_NAME, compilation => {
 			const tasks = [];
 			tasks.push(
 				new Promise((resolve, reject) => {
 					compilation.addInclude(
 						compiler.context,
-						EntryPlugin.createDependency(path.resolve(__dirname, "foo.js")),
+						fooDependency,
 						{},
 						(err, module) => {
 							if (err) {
@@ -37,7 +47,7 @@ class Plugin {
 				new Promise((resolve, reject) => {
 					compilation.addInclude(
 						compiler.context,
-						EntryPlugin.createDependency(path.resolve(__dirname, "bar.js")),
+						barDependency,
 						{},
 						(err, module) => {
 							if (err) {
@@ -48,6 +58,21 @@ class Plugin {
 								compilation.moduleGraph.getExportsInfo(module);
 							exportsInfo.setUsedInUnknownWay("main");
 							modules["bar"] = module;
+							resolve(module);
+						}
+					);
+				})
+			);
+			tasks.push(
+				new Promise(resolve => {
+					compilation.addInclude(
+						compiler.context,
+						EntryPlugin.createDependency(
+							path.resolve(__dirname, "no-exist.js")
+						),
+						{},
+						(err, module) => {
+							expect(err.message).toMatch(/Can't resolve/);
 							resolve(module);
 						}
 					);
@@ -67,6 +92,16 @@ class Plugin {
 					path.join(compiler.outputPath, "manifest.json"),
 					JSON.stringify(manifest),
 					"utf-8"
+				);
+
+				const fooModule = compilation.moduleGraph.getModule(fooDependency);
+				expect(path.normalize(fooModule.request)).toBe(
+					path.resolve(__dirname, "./foo.js")
+				);
+
+				const barModule = compilation.moduleGraph.getModule(barDependency);
+				expect(path.normalize(barModule.request)).toBe(
+					path.resolve(__dirname, "./bar.js")
 				);
 			});
 		});

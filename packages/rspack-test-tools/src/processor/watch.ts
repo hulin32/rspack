@@ -60,7 +60,8 @@ export class WatchProcessor<
 	async build(context: ITestContext) {
 		const compiler = this.getCompiler(context);
 		const currentWatchStepModule = require(currentWatchStepModulePath);
-		currentWatchStepModule.step = this._watchOptions.stepName;
+		currentWatchStepModule.step[this._options.name] =
+			this._watchOptions.stepName;
 		fs.mkdirSync(this._watchOptions.tempDir, { recursive: true });
 		copyDiff(
 			path.join(context.getSource(), this._watchOptions.stepName),
@@ -125,8 +126,25 @@ export class WatchProcessor<
 					return cached;
 				};
 			})();
+			const getStringStats = (() => {
+				let cached: string | null = null;
+				return () => {
+					if (!cached) {
+						cached = stats.toString({
+							logging: "verbose"
+						});
+					}
+					return cached;
+				};
+			})();
 			if (checkStats.length > 1) {
-				if (!checkStats(this._watchOptions.stepName, getJsonStats())) {
+				if (
+					!checkStats(
+						this._watchOptions.stepName,
+						getJsonStats(),
+						getStringStats()
+					)
+				) {
 					throw new Error("stats check failed");
 				}
 			} else {
@@ -252,7 +270,7 @@ export class WatchProcessor<
 			if (!options.output) options.output = {};
 			if (!options.output.path) options.output.path = context.getDist();
 			if (typeof options.output.pathinfo === "undefined")
-				options.output.pathinfo = true;
+				options.output.pathinfo = false;
 			if (!options.output.filename) options.output.filename = "bundle.js";
 			if (options.cache && (options.cache as any).type === "filesystem") {
 				const cacheDirectory = path.join(tempDir, ".cache");
@@ -290,6 +308,12 @@ export class WatchProcessor<
 			(
 				options as TCompilerOptions<ECompilerType.Rspack>
 			).experiments!.rspackFuture!.bundlerInfo!.force ??= false;
+
+			if (!global.printLogger) {
+				options.infrastructureLogging = {
+					level: "error"
+				};
+			}
 		};
 	}
 
@@ -328,7 +352,8 @@ export class WatchStepProcessor<
 	async build(context: ITestContext) {
 		const compiler = this.getCompiler(context);
 		const currentWatchStepModule = require(currentWatchStepModulePath);
-		currentWatchStepModule.step = this._watchOptions.stepName;
+		currentWatchStepModule.step[this._options.name] =
+			this._watchOptions.stepName;
 		const task = new Promise((resolve, reject) => {
 			compiler.getEmitter().once(ECompilerEvent.Build, (e, stats) => {
 				if (e) return reject(e);

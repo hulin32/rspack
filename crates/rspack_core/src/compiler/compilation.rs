@@ -612,7 +612,7 @@ impl Compilation {
     self.make_artifact = update_module_graph(
       self,
       make_artifact,
-      vec![MakeParam::BuildEntryAndClean(
+      vec![MakeParam::BuildEntry(
         self
           .entries
           .values()
@@ -1346,11 +1346,13 @@ impl Compilation {
 
     let start = logger.time("create chunks");
     use_code_splitting_cache(self, |compilation| async {
+      let start = logger.time("rebuild chunk graph");
       if compilation.options.experiments.parallel_code_splitting {
         build_chunk_graph_new(compilation)?;
       } else {
         build_chunk_graph(compilation)?;
       }
+      logger.time_end(start);
       Ok(compilation)
     })
     .await?;
@@ -1419,14 +1421,46 @@ impl Compilation {
       for revoked_module in revoked_modules {
         self.cgm_hash_artifact.remove(&revoked_module);
       }
-      let modules = mutations.get_affected_modules_with_chunk_graph(self);
+      let mg = self.get_module_graph();
+      let mut affected_modules = mutations.get_affected_modules_with_module_graph(&mg);
+      for mutation in mutations.iter() {
+        match mutation {
+          Mutation::ModuleSetAsync { module } => {
+            affected_modules.insert(*module);
+          }
+          Mutation::ModuleSetId { module } => {
+            affected_modules.insert(*module);
+            affected_modules.extend(
+              mg.get_incoming_connections(module)
+                .filter_map(|c| c.original_module_identifier),
+            );
+          }
+          Mutation::ChunkAdd { chunk } => {
+            affected_modules.extend(self.chunk_graph.get_chunk_modules_identifier(chunk));
+          }
+          Mutation::ChunkSetId { chunk } => {
+            let chunk = self.chunk_by_ukey.expect_get(chunk);
+            affected_modules.extend(
+              chunk
+                .groups()
+                .iter()
+                .flat_map(|group| {
+                  let group = self.chunk_group_by_ukey.expect_get(group);
+                  group.origins()
+                })
+                .filter_map(|origin| origin.module),
+            );
+          }
+          _ => {}
+        }
+      }
       let logger = self.get_logger("rspack.incremental.modulesHashes");
       logger.log(format!(
         "{} modules are affected, {} in total",
-        modules.len(),
-        self.get_module_graph().modules().len()
+        affected_modules.len(),
+        mg.modules().len()
       ));
-      modules
+      affected_modules
     } else {
       self.get_module_graph().modules().keys().copied().collect()
     };
@@ -1454,7 +1488,13 @@ impl Compilation {
       for revoked_module in revoked_modules {
         self.code_generation_results.remove(&revoked_module);
       }
-      let modules = mutations.get_affected_modules_with_chunk_graph(self);
+      let modules: IdentifierSet = mutations
+        .iter()
+        .filter_map(|mutation| match mutation {
+          Mutation::ModuleSetHashes { module } => Some(*module),
+          _ => None,
+        })
+        .collect();
       let logger = self.get_logger("rspack.incremental.modulesCodegen");
       logger.log(format!(
         "{} modules are affected, {} in total",
@@ -1488,7 +1528,13 @@ impl Compilation {
           .cgm_runtime_requirements_artifact
           .remove(&revoked_module);
       }
-      let modules = mutations.get_affected_modules_with_chunk_graph(self);
+      let modules: IdentifierSet = mutations
+        .iter()
+        .filter_map(|mutation| match mutation {
+          Mutation::ModuleSetHashes { module } => Some(*module),
+          _ => None,
+        })
+        .collect();
       let logger = self.get_logger("rspack.incremental.modulesRuntimeRequirements");
       logger.log(format!(
         "{} modules are affected, {} in total",
@@ -2162,7 +2208,11 @@ impl Compilation {
       })
       .collect::<Result<_>>()?;
     for (module, hashes) in results {
-      ChunkGraph::set_module_hashes(self, module, hashes);
+      if ChunkGraph::set_module_hashes(self, module, hashes)
+        && let Some(mutations) = self.incremental.mutations_write()
+      {
+        mutations.add(Mutation::ModuleSetHashes { module });
+      }
     }
     Ok(())
   }
@@ -2275,11 +2325,6 @@ impl Compilation {
       .clone()
   }
 
-  // TODO remove it after code splitting support incremental rebuild
-  pub fn has_module_import_export_change(&self) -> bool {
-    self.make_artifact.has_module_graph_change
-  }
-
   pub fn built_modules(&self) -> &IdentifierSet {
     &self.make_artifact.built_modules
   }
@@ -2365,14 +2410,14 @@ pub struct AssetInfo {
   pub version: String,
   /// unused local idents of the chunk
   pub css_unused_idents: Option<HashSet<String>>,
+  /// whether this asset is over the size limit
+  pub is_over_size_limit: Option<bool>,
+
   /// Webpack: AssetInfo = KnownAssetInfo & Record<string, any>
-  /// But Napi.rs does not support Intersectiont types. This is a hack to store the additional fields
-  /// in the rust struct and have the Js side to reshape and align with webpack.
+  /// This is a hack to store the additional fields in the rust struct.
   /// Related: packages/rspack/src/Compilation.ts
   #[cacheable(with=AsPreset)]
   pub extras: serde_json::Map<String, serde_json::Value>,
-  /// whether this asset is over the size limit
-  pub is_over_size_limit: Option<bool>,
 }
 
 impl AssetInfo {

@@ -56,28 +56,27 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: ${{ inputs.ref }}
-          clean: ${{ startsWith(runner.name, 'GitHub Actions') }}
+          clean: ${{ runner.environment == 'github-hosted' }}
 
       - name: Clean
-        if: ${{ !inputs.skipable && !startsWith(runner.name, 'GitHub Actions') }}
+        if: ${{ !inputs.skipable && runner.environment == 'self-hosted' }}
         uses: ./.github/actions/clean
         with:
           target: ${{ inputs.target }}
 
       - name: Pnpm Setup
         if: ${{ !inputs.skipable }}
-        uses: ./.github/actions/pnpm-cache
-        with:
-          save-if: ${{ github.ref_name == 'main' }}
-          run-install: ${{ inputs.full-install == 'true' }}
+        uses: ./.github/actions/pnpm/setup
 
-      - name: Install binding node dependencies
+      - name: Install Full Dependencies
+        if: ${{ !inputs.skipable && inputs.full-install == 'true' }}
+        uses: ./.github/actions/pnpm/install-dependencies
+
+      - name: Install Binding Dependencies
         if: ${{ !inputs.skipable && inputs.full-install != 'true' }}
-        shell: bash
-        run: |
-          cd ./crates/node_binding
-          pnpm install --ignore-workspace --no-lockfile
-          cd ../../
+        uses: ./.github/actions/pnpm/install-binding-dependencies
+        with:
+          save-if: ${{ github.ref_name == 'main' && matrix.node == '18' }}
 
       - name: Install Rust Toolchain
         if: ${{ !inputs.skipable }}
@@ -95,7 +94,7 @@ jobs:
 
       - name: Check local cache
         id: check_cache
-        if: ${{ inputs.profile == 'ci' && !startsWith(runner.name, 'GitHub Actions') && !inputs.skipable }}
+        if: ${{ inputs.profile == 'ci' && runner.environment == 'self-hosted' && !inputs.skipable }}
         shell: bash
         run: |
           set -e
@@ -108,7 +107,7 @@ jobs:
 
       # Fix: Resolve disk space error "ENOSPC: no space left on device" on GitHub Actions runners
       - name: Free disk cache
-        if: ${{ startsWith(runner.name, 'GitHub Actions') && inputs.target == 'x86_64-unknown-linux-gnu' && steps.check_cache.outputs.exists != 'true' && !inputs.skipable }}
+        if: ${{ runner.environment == 'github-hosted' && inputs.target == 'x86_64-unknown-linux-gnu' && steps.check_cache.outputs.exists != 'true' && !inputs.skipable }}
         uses: xc2/free-disk-space@fbe203b3788f2bebe2c835a15925da303eaa5efe # v1.0.0
         with:
           tool-cache: false
@@ -189,7 +188,7 @@ jobs:
       - name: Build aarch64-apple-darwin
         if: ${{ inputs.target == 'aarch64-apple-darwin' && steps.check_cache.outputs.files_exists != 'true' && !inputs.skipable }}
         run: |
-          if [[ "${{ startsWith(runner.name, 'GitHub Actions') }}" == "true" ]]; then
+          if [[ "${{ runner.environment == 'github-hosted' }}" == "true" ]]; then
             # Github runner
             sudo rm -Rf /Library/Developer/CommandLineTools/SDKs/*;
           fi
@@ -201,13 +200,11 @@ jobs:
 
       - name: Upload artifact
         id: upload-artifact
-        uses: ./.github/actions/upload-artifact
+        uses: ./.github/actions/artifact/upload
         if: ${{ steps.check_cache.outputs.exists != 'true' && !inputs.skipable }}
         with:
           name: bindings-${{ inputs.target }}
           path: crates/node_binding/*.node
-          try-local-cache: ${{ inputs.profile == 'ci' }}
-          mv-when-local: true
 
   e2e:
     name: E2E Testing
@@ -219,26 +216,27 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: ${{ inputs.ref }}
-          clean: ${{ startsWith(runner.name, 'GitHub Actions') }}
+          clean: ${{ runner.environment == 'github-hosted' }}
 
       - name: Clean
-        if: ${{ !startsWith(runner.name, 'GitHub Actions') }}
+        if: ${{ runner.environment == 'self-hosted' }}
         uses: ./.github/actions/clean
         with:
           target: ${{ inputs.target }}
 
       - name: Download bindings
-        uses: ./.github/actions/download-artifact
+        uses: ./.github/actions/artifact/download
         with:
           name: bindings-${{ inputs.target }}
           path: crates/node_binding/
-          try-local-cache: ${{ inputs.profile == 'ci' }}
-          link-when-local: true
 
       - name: Setup Pnpm
-        uses: ./.github/actions/pnpm-cache
+        uses: ./.github/actions/pnpm/setup
         with:
           node-version: 20
+
+      - name: Pnpm Install
+        uses: ./.github/actions/pnpm/install-dependencies
 
       - name: Calculate Node Bin Path
         id: calculate-node-bin-path
@@ -273,31 +271,28 @@ jobs:
     name: Test Node ${{ matrix.node }}
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
-      # TODO: use puppeteer to test SRI Plugin, maybe find a better performance way
-      # PUPPETEER_SKIP_DOWNLOAD: true
-      
+      PUPPETEER_SKIP_DOWNLOAD: true
+
     steps:
       - name: Checkout
         if: ${{ !inputs.skipable }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: ${{ inputs.ref }}
-          clean: ${{ startsWith(runner.name, 'GitHub Actions') }}
+          clean: ${{ runner.environment == 'github-hosted' }}
 
       - name: Clean
-        if: ${{ !inputs.skipable && !startsWith(runner.name, 'GitHub Actions') }}
+        if: ${{ !inputs.skipable && runner.environment == 'self-hosted' }}
         uses: ./.github/actions/clean
         with:
           target: ${{ inputs.target }}
 
       - name: Download bindings
         if: ${{ !inputs.skipable }}
-        uses: ./.github/actions/download-artifact
+        uses: ./.github/actions/artifact/download
         with:
           name: bindings-${{ inputs.target }}
           path: crates/node_binding/
-          try-local-cache: ${{ inputs.profile == 'ci' }}
-          link-when-local: true
 
       - name: Show restored binding
         if: ${{ !inputs.skipable }}
@@ -306,10 +301,15 @@ jobs:
 
       - name: Setup Pnpm
         if: ${{ !inputs.skipable }}
-        uses: ./.github/actions/pnpm-cache
+        uses: ./.github/actions/pnpm/setup
         with:
           node-version: ${{ matrix.node }}
 
+      - name: Pnpm Install
+        if: ${{ !inputs.skipable }}
+        uses: ./.github/actions/pnpm/install-dependencies
+        with:
+          save-if: ${{ github.ref_name == 'main' && matrix.node == '18' }}
       ### x86_64-unknown-linux-gnu
 
       - name: Test x86_64-unknown-linux-gnu
@@ -344,15 +344,6 @@ jobs:
         if: ${{ inputs.target == 'x86_64-pc-windows-msvc' && !inputs.skipable }}
         run: pnpm run test:ci
 
-      - name: API change check
-        if: ${{ inputs.target == 'x86_64-unknown-linux-gnu' && !inputs.skipable }}
-        run: |
-          echo "===================================="
-          echo "Note: force build npm packages with \`pnpm build:js\` and  \`pnpm api-extractor:local\` locally to generate API change if \`api-extractor\` check failed."
-          echo "$ pnpm build:js && pnpm api-extractor:local"
-          echo "===================================="
-          pnpm api-extractor:ci
-
       ### write the latest metric into branch gh-pages
       ### Note that, We can't merge this script, because this script only runs on main branch
       ### [Note] This step requires push permission and should be refactored.
@@ -368,9 +359,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           sha: ${{ github.sha }}
 
-      - name: Documentation coverage check
-        if: ${{ inputs.target == 'x86_64-unknown-linux-gnu' && !inputs.skipable }}
-        run: pnpm doc-coverage
+      
 
   bench:
     name: Bench
@@ -381,10 +370,10 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: ${{ inputs.ref }}
-          clean: ${{ startsWith(runner.name, 'GitHub Actions') }}
+          clean: ${{ runner.environment == 'github-hosted' }}
 
       - name: Clean
-        if: ${{ !startsWith(runner.name, 'GitHub Actions') }}
+        if: ${{ runner.environment == 'self-hosted' }}
         uses: ./.github/actions/clean
         with:
           target: ${{ inputs.target }}
@@ -394,9 +383,9 @@ jobs:
         with:
           save-cache: ${{ github.ref_name == 'main' }} # This should be safe because we have nightly building the cache every day
           shared-key: build-bench-${{ inputs.target }}-${{ inputs.profile }}
-      
+
       - name: Install cargo-codspeed binary
-        uses: taiki-e/install-action@54b836426b3fa9aef432e760885ea0419ab50dab # v2
+        uses: taiki-e/install-action@f87f9990b09867202953bff9aa0c80e23ee16bb7 # v2
         with:
           tool: cargo-codspeed@2.7.2
 
@@ -406,33 +395,34 @@ jobs:
         run: cargo codspeed build -p rspack_benchmark --features codspeed
 
       - name: Wait for build job
-        uses: lewagon/wait-on-check-action@v1.3.4
+        uses: lewagon/wait-on-check-action@ccfb013c15c8afb7bf2b7c028fb74dc5a068cccc # v1.3.4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          check-name: 'Test Linux / Build'
+          check-name: "Test Linux / Build"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 10
-      
+
       - name: Download bindings
-        uses: ./.github/actions/download-artifact
+        uses: ./.github/actions/artifact/download
         with:
           name: bindings-${{ inputs.target }}
           path: crates/node_binding/
-          try-local-cache: ${{ inputs.profile == 'ci' }}
-          link-when-local: true
 
       - name: Show restored binding
         shell: bash
         run: ls -lah crates/node_binding/*.node
 
-      - name: Pnpm Cache
-        uses: ./.github/actions/pnpm-cache
+      - name: Pnpm Setup
+        uses: ./.github/actions/pnpm/setup
+
+      - name: Pnpm Install
+        uses: ./.github/actions/pnpm/install-dependencies
 
       - name: Build JS
         run: pnpm run build:js
 
       - name: Run benchmark
-        uses: CodSpeedHQ/action@1015f4f828ff74b7a950909897fe581d6ba868cc # v3
+        uses: CodSpeedHQ/action@63ae6025a0ffee97d7736a37c9192dbd6ed4e75f # v3
         timeout-minutes: 30
         with:
           run: pnpm run bench:ci

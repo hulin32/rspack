@@ -806,7 +806,7 @@ impl<'a> ModuleGraph<'a> {
     exports_info.get_export_info(self, export_name)
   }
 
-  pub(crate) fn get_ordered_outgoing_connections(
+  pub fn get_outgoing_connections_in_order(
     &self,
     module_identifier: &ModuleIdentifier,
   ) -> impl Iterator<Item = &DependencyId> {
@@ -1072,6 +1072,13 @@ impl<'a> ModuleGraph<'a> {
       .module_graph_module_by_identifier_mut(id)
       .expect("should have module graph module");
     mgm.optimization_bailout_mut()
+  }
+
+  pub fn get_optimization_bailout(&self, id: &ModuleIdentifier) -> &Vec<String> {
+    let mgm = self
+      .module_graph_module_by_identifier(id)
+      .expect("should have module graph module");
+    &mgm.optimization_bailout
   }
 
   pub fn get_read_only_export_info(&self, id: &ModuleIdentifier, name: Atom) -> Option<ExportInfo> {
