@@ -34,7 +34,7 @@
   },
   "dependencies": {
     "@discoveryjs/json-ext": "^0.5.7",
-    "@rspack/dev-server": "1.0.10",
+    "@rspack/dev-server": "1.1.0",
     "colorette": "2.0.20",
     "exit-hook": "^4.0.0",
     "interpret": "^3.1.1",
@@ -43,7 +43,7 @@
     "yargs": "17.7.2"
   },
   "devDependencies": {
-    "@rslib/core": "0.5.3",
+    "@rslib/core": "0.5.4",
     "@rspack/core": "workspace:*",
     "@rspack/tracing": "workspace:*",
     "@types/interpret": "^1.1.3",
